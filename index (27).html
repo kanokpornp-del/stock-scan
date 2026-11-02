@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Stock Scan SFCL</title>
+<meta name="theme-color" content="#1f4e78">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f3f5f9; --card:#fff; --ink:#1d2433; --mute:#6b7488; --line:#e3e7ef;
+    --in:#16a34a; --out:#dc2626; --count:#2563eb; --warn:#d97706; --main:#1f4e78;
+    --mode:var(--out);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Sarabun',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  header{background:var(--main);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+  header b{font-size:18px}
+  #net{font-size:12px;opacity:.85}
+  nav{display:flex;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:48px;z-index:9}
+  nav button{flex:1;border:0;background:none;padding:12px 4px;font:inherit;font-weight:600;color:var(--mute);border-bottom:3px solid transparent;cursor:pointer}
+  nav button.on{color:var(--main);border-color:var(--main)}
+  main{max-width:900px;margin:auto;padding:14px 16px 90px}
+  section{display:none} section.on{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .modes button{border:2px solid var(--line);background:#fff;border-radius:12px;padding:12px 4px;font:inherit;font-weight:700;cursor:pointer}
+  .modes button[data-m=IN].on{background:var(--in);border-color:var(--in);color:#fff}
+  .modes button[data-m=OUT].on{background:var(--out);border-color:var(--out);color:#fff}
+  .modes button[data-m=COUNT].on{background:var(--count);border-color:var(--count);color:#fff}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label{font-size:13px;color:var(--mute);display:block;margin-bottom:4px}
+  input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+  input:focus{outline:2px solid var(--mode);border-color:transparent}
+  .scanrow{display:flex;gap:8px}
+  #scanInput{font-size:18px;border:2px solid var(--mode)}
+  .btn{border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:700;cursor:pointer;background:#eef1f6;color:var(--ink);white-space:nowrap}
+  .btn.primary{background:var(--mode);color:#fff}
+  .btn.main{background:var(--main);color:#fff}
+  .btn:disabled{opacity:.5}
+  #reader{margin-top:10px;border-radius:12px;overflow:hidden}
+  #flash{margin-top:10px;padding:10px 12px;border-radius:10px;display:none;font-weight:600}
+  #flash.ok{display:block;background:#e8f7ee;color:#11632f}
+  #flash.err{display:block;background:#fdecec;color:#991b1b}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{font-size:13px;color:var(--mute);font-weight:600}
+  td.n,th.n{text-align:right}
+  .sub{font-size:12px;color:var(--mute)}
+  .qty{display:flex;align-items:center;gap:4px;justify-content:flex-end}
+  .qty input{width:62px;text-align:center;padding:7px 4px}
+  .qty button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:#fff;font-size:18px;cursor:pointer}
+  .del{border:0;background:none;color:var(--out);font-size:18px;cursor:pointer}
+  .neg{color:var(--out);font-weight:700}
+  .pos{color:var(--in);font-weight:700}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;align-items:center;z-index:9}
+  .bar .sum{flex:1;font-weight:700}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+  .kpi{background:#f7f9fc;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+  .kpi b{display:block;font-size:22px}
+  .tag{padding:3px 8px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+  .t-ok{background:#e8f7ee;color:#11632f} .t-bad{background:#fdecec;color:#991b1b} .t-warn{background:#fff4e0;color:#8a4b05}
+  .t-IN{background:#e8f7ee;color:#11632f} .t-OUT{background:#fdecec;color:#991b1b} .t-COUNT{background:#e8efff;color:#1e40af} .t-ADJ{background:#fff4e0;color:#8a4b05}
+  .empty{text-align:center;color:var(--mute);padding:24px}
+  #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);padding:12px 18px;border-radius:12px;color:#fff;font-weight:600;display:none;z-index:99;max-width:92%;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+  .row-flex{display:flex;gap:8px;align-items:end}
+  @media(max-width:560px){.grid{grid-template-columns:1fr 1fr}.cards{grid-template-columns:1fr 1fr}.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<header><b>📦 Stock Scan SFCL</b><span><span id="net">กำลังโหลด…</span> <button id="setBtn" style="background:none;border:0;color:#fff;font-size:18px;cursor:pointer" title="ตั้งค่า">⚙️</button></span></header>
+<nav>
+  <button data-tab="scan" class="on">🔍 สแกน</button>
+  <button data-tab="stock">📊 คงเหลือ</button>
+  <button data-tab="compare">⚖️ เทียบรีพอต</button>
+  <button data-tab="history">🕘 ประวัติ</button>
+</nav>
+
+<main>
+<!-- ============ สแกน ============ -->
+<section id="tab-scan" class="on">
+  <div class="modes">
+    <button data-m="IN">⬇️ รับเข้า</button>
+    <button data-m="OUT" class="on">⬆️ ส่งออก/ตัด</button>
+    <button data-m="COUNT">🧮 ตรวจนับ</button>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div><label>เลขที่เอกสาร / ใบส่งออก *</label><input id="ref" placeholder="เช่น OUT-2611-001" autocomplete="off"></div>
+      <div><label>วันที่</label><input id="date" type="date"></div>
+      <div><label>รหัสพนักงาน *</label><input id="staff" placeholder="เช่น PC001" autocomplete="off"></div>
+      <div><label>รหัสสาขา/พื้นที่</label><input id="branch" placeholder="เช่น BR01" autocomplete="off"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>ยิงปืนสแกน หรือพิมพ์บาร์โค้ดแล้วกด Enter</label>
+    <div class="scanrow">
+      <input id="scanInput" inputmode="numeric" placeholder="▌ รอสแกน…" autocomplete="off">
+      <input id="step" type="number" min="1" value="1" style="width:70px" title="จำนวนต่อ 1 สแกน">
+    </div>
+    <div class="scanrow" style="margin-top:8px">
+      <button class="btn main" id="camBtn" style="flex:1">📷 เปิดกล้องสแกน</button>
+      <button class="btn" id="photoBtn" style="flex:1">📸 ถ่ายรูปบาร์โค้ด</button>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+    </div>
+    <div id="reader"></div><div id="reader-file" hidden></div>
+    <div id="flash"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <b id="cartTitle">รายการที่สแกน</b>
+      <button class="btn" id="clearBtn">🗑 ล้าง</button>
+    </div>
+    <table>
+      <thead><tr><th>สินค้า</th><th class="n hide-sm" id="balHead">คงเหลือ</th><th class="n">จำนวน</th><th></th></tr></thead>
+      <tbody id="cart"></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="varCard" hidden>
+    <b>ผลตรวจนับ เทียบยอดในระบบ</b>
+    <table style="margin-top:8px">
+      <thead><tr><th>สินค้า</th><th class="n">ระบบ</th><th class="n">นับได้</th><th class="n">ส่วนต่าง</th></tr></thead>
+      <tbody id="varBody"></tbody>
+    </table>
+    <button class="btn main" id="adjBtn" style="margin-top:10px;width:100%">✔️ ปรับสต็อกให้ตรงกับยอดนับ</button>
+  </div>
+</section>
+
+<!-- ============ คงเหลือ ============ -->
+<section id="tab-stock">
+  <div class="card">
+    <div class="row-flex">
+      <div style="flex:1"><input id="stockSearch" placeholder="ค้นหาชื่อ / บาร์โค้ด"></div>
+      <button class="btn main" id="stockRefresh">↻</button>
+    </div>
+    <div class="cards">
+      <div class="kpi"><span class="sub">SKU</span><b id="kSku">0</b></div>
+      <div class="kpi"><span class="sub">รวมชิ้น</span><b id="kPcs">0</b></div>
+      <div class="kpi"><span class="sub">หมด (=0)</span><b id="kZero">0</b></div>
+      <div class="kpi"><span class="sub">ติดลบ</span><b id="kNeg" class="neg">0</b></div>
+    </div>
+    <table>
+      <thead><tr><th>สินค้า</th><th class="hide-sm">บาร์โค้ด</th><th class="n">คงเหลือ</th></tr></thead>
+      <tbody id="stockBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ เทียบรีพอต ============ -->
+<section id="tab-compare">
+  <div class="card">
+    <label>เลือก / พิมพ์เลขที่ใบส่งออก</label>
+    <div class="row-flex">
+      <div style="flex:1"><input id="cmpRef" list="refList" placeholder="เลขที่เอกสาร" autocomplete="off"><datalist id="refList"></datalist></div>
+      <button class="btn main" id="cmpBtn">⚖️ เทียบ</button>
+    </div>
+    <p class="sub">วางรีพอตของน้องในชีต <b>STAFF_REPORT</b> (วันที่ | เลขที่เอกสาร | รหัสสาขา | รหัสพนักงาน | บาร์โค้ด | ชื่อสินค้า | จำนวนที่รายงาน) แล้วกดเทียบ</p>
+    <div id="cmpResult"></div>
+  </div>
+</section>
+
+<!-- ============ ประวัติ ============ -->
+<section id="tab-history">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b>100 รายการล่าสุด</b><button class="btn main" id="histRefresh">↻</button></div>
+    <table style="margin-top:8px">
+      <thead><tr><th>เวลา</th><th>ประเภท</th><th>เอกสาร</th><th>สินค้า</th><th class="n">จำนวน</th></tr></thead>
+      <tbody id="histBody"></tbody>
+    </table>
+  </div>
+</section>
+</main>
+
+<div class="bar" id="saveBar">
+  <div class="sum" id="sumText">0 รายการ · 0 ชิ้น</div>
+  <button class="btn primary" id="saveBtn">💾 บันทึกส่งออก</button>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Number(n || 0).toLocaleString('th-TH');
+const MODE_INFO = {
+  IN:   { label:'รับเข้า',  color:'var(--in)',    save:'💾 บันทึกรับเข้า' },
+  OUT:  { label:'ส่งออก',  color:'var(--out)',   save:'💾 บันทึกส่งออก/ตัดสต็อก' },
+  COUNT:{ label:'ตรวจนับ', color:'var(--count)', save:'💾 บันทึกยอดนับ' }
+};
+let PRODUCTS = {}, STOCK = [], CART = new Map(), MODE = 'OUT', camera = null, lastCode = '', lastTime = 0, LAST_VAR = null;
+
+/* ---------- server call (ผ่าน API ของ Apps Script) ---------- */
+// 👉 วางลิงก์ Web app (/exec) ของ Apps Script ตรงนี้ หรือกด ⚙️ ในแอปเพื่อใส่ทีหลังก็ได้
+const DEFAULT_API_URL = 'PASTE_YOUR_EXEC_URL_HERE';
+function apiUrl(){ const u = load('apiUrl', ''); return u || (DEFAULT_API_URL.startsWith('http') ? DEFAULT_API_URL : ''); }
+function apiKey(){ return load('apiKey', ''); }
+async function call(fn, ...args){
+  if (!apiUrl() || !apiKey()){ openSettings(); throw 'ยังไม่ได้ตั้งค่าลิงก์ API / รหัสทีม'; }
+  let res;
+  try{
+    res = await fetch(apiUrl(), { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: apiKey(), action: fn, args }) });
+  }catch(e){ throw 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (เช็คเน็ต หรือการตั้งค่า Deploy ต้องเป็น Anyone)'; }
+  let j;
+  try{ j = await res.json(); }catch(e){ throw 'ลิงก์ API ไม่ถูกต้อง หรือ Deploy ไม่ได้ตั้งเป็น Anyone'; }
+  if (!j.ok){ if (/รหัสทีม/.test(j.error)) openSettings(); throw j.error; }
+  return j.data;
+}
+function openSettings(){
+  const u = prompt('ลิงก์ Web app ของ Apps Script (ลงท้าย /exec)', apiUrl());
+  if (u === null) return;
+  const k = prompt('รหัสทีม (API_KEY ใน Code.gs)', apiKey());
+  if (k === null) return;
+  store('apiUrl', u.trim()); store('apiKey', k.trim());
+  location.reload();
+}
+/* ---------- storage (กันข้อมูลหายตอนรีเฟรช) ---------- */
+function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
+
+/* ---------- feedback ---------- */
+let actx;
+function beep(ok){
+  try{
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = ok ? 1200 : 300; o.type = ok ? 'sine' : 'square';
+    g.gain.value = .15; o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + (ok ? .09 : .35));
+  }catch(e){}
+  if (navigator.vibrate) navigator.vibrate(ok ? 40 : [80,60,80]);
+}
+function toast(msg, type){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.style.background = type === 'err' ? '#b91c1c' : type === 'warn' ? '#b45309' : '#15803d';
+  t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3200);
+}
+function flash(msg, ok){ const f = $('#flash'); f.className = ok ? 'ok' : 'err'; f.textContent = msg; }
+
+/* ---------- init ---------- */
+function init(){
+  $('#date').value = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  $('#staff').value = load('staff', '');
+  $('#branch').value = load('branch', '');
+  (load('cart', []) || []).forEach(i => CART.set(i.barcode, i));
+  setMode(load('mode', 'OUT'));
+
+  call('getInitData').then(d => {
+    d.products.forEach(p => PRODUCTS[p.barcode] = p);
+    STOCK = d.stock; renderStock(); renderCart(); fillRefs(d.refs);
+    $('#net').textContent = 'พร้อม · ' + d.products.length + ' SKU';
+    focusScan();
+  }).catch(e => { $('#net').textContent = 'โหลดไม่สำเร็จ'; toast(e, 'err'); });
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + b.dataset.tab));
+  $('#saveBar').style.display = b.dataset.tab === 'scan' ? 'flex' : 'none';
+  if (b.dataset.tab === 'history') loadHistory();
+  if (b.dataset.tab === 'scan') focusScan(); else stopCamera();
+});
+
+/* ---------- modes ---------- */
+function setMode(m){
+  MODE = MODE_INFO[m] ? m : 'OUT';
+  document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('on', b.dataset.m === MODE));
+  document.documentElement.style.setProperty('--mode', MODE_INFO[MODE].color);
+  $('#saveBtn').textContent = MODE_INFO[MODE].save;
+  $('#cartTitle').textContent = 'รายการ' + MODE_INFO[MODE].label;
+  $('#balHead').textContent = MODE === 'OUT' ? 'คงเหลือ→หลังตัด' : 'คงเหลือระบบ';
+  store('mode', MODE); renderCart(); focusScan();
+}
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  if (CART.size && b.dataset.m !== MODE && !confirm('เปลี่ยนโหมดแล้วรายการเดิมยังอยู่ ใช้ต่อในโหมดใหม่ใช่ไหม?')) return;
+  setMode(b.dataset.m);
+});
+['staff','branch'].forEach(id => $('#'+id).addEventListener('change', e => store(id, e.target.value.trim().toUpperCase())));
+
+/* ---------- scanning ---------- */
+function focusScan(){ if ($('#tab-scan').classList.contains('on')) setTimeout(() => $('#scanInput').focus(), 50); }
+
+function handleScan(raw){
+  const code = String(raw || '').replace(/\s/g, '');
+  if (!code) return;
+  const p = PRODUCTS[code];
+  if (!p){ beep(false); flash('❌ ไม่พบบาร์โค้ด ' + code + ' ในชีต DATA', false); return; }
+  const step = Math.max(1, parseInt($('#step').value) || 1);
+  const item = CART.get(code) || { barcode: code, name: p.name, detail: p.detail, qty: 0 };
+  item.qty += step;
+  CART.delete(code); CART.set(code, item);          // ดันตัวล่าสุดขึ้นบน
+  beep(true); flash('✅ ' + p.name + ' · ' + p.detail + '  (รวม ' + item.qty + ')', true);
+  renderCart();
+}
+
+// ปืนสแกน = คีย์บอร์ด + Enter/Tab
+$('#scanInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); handleScan(e.target.value); e.target.value = ''; }
+});
+// เผื่อโฟกัสหลุด: จับตัวอักษรที่ยิงเร็วๆ ทั้งหน้า
+let buf = '', bufT = 0;
+document.addEventListener('keydown', e => {
+  const tag = (document.activeElement || {}).tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if (!$('#tab-scan').classList.contains('on')) return;
+  const now = Date.now(); if (now - bufT > 80) buf = ''; bufT = now;
+  if (e.key === 'Enter'){ if (buf.length >= 6) handleScan(buf); buf = ''; return; }
+  if (e.key.length === 1) buf += e.key;
+});
+
+// กล้องสด
+async function stopCamera(){
+  if (!camera) return;
+  try{ await camera.stop(); camera.clear(); }catch(e){}
+  camera = null; $('#camBtn').textContent = '📷 เปิดกล้องสแกน';
+}
+$('#camBtn').onclick = async () => {
+  if (camera) return stopCamera();
+  const F = Html5QrcodeSupportedFormats;
+  camera = new Html5Qrcode('reader', {
+    formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.QR_CODE],
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false
+  });
+  try{
+    await camera.start({ facingMode: 'environment' },
+      { fps: 12, qrbox: { width: 280, height: 130 } },
+      text => { const n = Date.now(); if (text === lastCode && n - lastTime < 1500) return; lastCode = text; lastTime = n; handleScan(text); });
+    $('#camBtn').textContent = '⏹ ปิดกล้อง';
+  }catch(err){
+    camera = null;
+    toast('เปิดกล้องสดไม่ได้ → ใช้ปุ่ม 📸 ถ่ายรูปบาร์โค้ดแทน', 'warn');
+  }
+};
+// ถ่ายรูป (สำรอง ใช้ได้แทบทุกเครื่อง)
+$('#photoBtn').onclick = () => $('#photoInput').click();
+$('#photoInput').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    const r = new Html5Qrcode('reader-file');
+    const text = await r.scanFile(f, false); r.clear(); handleScan(text);
+  }catch(err){ beep(false); flash('❌ อ่านบาร์โค้ดจากรูปไม่ได้ ลองถ่ายให้ชัดและใกล้ขึ้น', false); }
+  e.target.value = '';
+};
+
+/* ---------- cart ---------- */
+function balOf(b){ const s = STOCK.find(x => x.barcode === b); return s ? s.balance : 0; }
+function renderCart(){
+  const items = [...CART.values()].reverse();
+  store('cart', [...CART.values()]);
+  const tb = $('#cart');
+  if (!items.length){ tb.innerHTML = '<tr><td colspan="4" class="empty">ยังไม่มีรายการ — ยิงสแกนได้เลย</td></tr>'; }
+  else tb.innerHTML = items.map(i => {
+    const bal = balOf(i.barcode), after = bal - i.qty;
+    const balCell = MODE === 'OUT'
+      ? `${fmt(bal)} → <span class="${after < 0 ? 'neg' : ''}">${fmt(after)}</span>`
+      : fmt(bal);
+    return `<tr>
+      <td><b>${esc(i.name)}</b><div class="sub">${esc(i.detail)} · ${esc(i.barcode)}</div></td>
+      <td class="n hide-sm">${balCell}</td>
+      <td><div class="qty">
+        <button onclick="chg('${i.barcode}',-1)">−</button>
+        <input type="number" min="0" value="${i.qty}" onchange="setQty('${i.barcode}',this.value)">
+        <button onclick="chg('${i.barcode}',1)">+</button></div></td>
+      <td><button class="del" onclick="delItem('${i.barcode}')">✕</button></td></tr>`;
+  }).join('');
+  const pcs = items.reduce((s, i) => s + i.qty, 0);
+  $('#sumText').textContent = fmt(items.length) + ' รายการ · ' + fmt(pcs) + ' ชิ้น';
+}
+function chg(b, d){ const i = CART.get(b); if (!i) return; i.qty = Math.max(0, i.qty + d); renderCart(); }
+function setQty(b, v){ const i = CART.get(b); if (!i) return; i.qty = Math.max(0, parseInt(v) || 0); renderCart(); }
+function delItem(b){ CART.delete(b); renderCart(); focusScan(); }
+$('#clearBtn').onclick = () => { if (CART.size && confirm('ล้างรายการทั้งหมด?')){ CART.clear(); renderCart(); $('#flash').className=''; focusScan(); } };
+
+/* ---------- save ---------- */
+async function save(extra){
+  extra = extra || {};
+  const ref = $('#ref').value.trim(), staff = $('#staff').value.trim();
+  if (!ref){ toast('ใส่เลขที่เอกสารก่อนนะ', 'err'); $('#ref').focus(); return; }
+  if (!staff){ toast('ใส่รหัสพนักงานก่อนนะ', 'err'); $('#staff').focus(); return; }
+  const items = [...CART.values()].filter(i => MODE === 'COUNT' ? i.qty >= 0 : i.qty > 0)
+                 .map(i => ({ barcode: i.barcode, qty: i.qty }));
+  if (!items.length){ toast('ยังไม่มีสินค้า', 'err'); return; }
+
+  const payload = Object.assign({ type: MODE, ref, staff, branch: $('#branch').value.trim(),
+                                  date: $('#date').value, items }, extra);
+  $('#saveBtn').disabled = true;
+  try{
+    const r = await call('saveTransaction', payload);
+    if (!r.ok && r.code === 'DUP_REF'){
+      if (confirm(r.message + '\n\nต้องการบันทึก "เพิ่ม" ในเลขเอกสารเดิมหรือไม่?')) return save(Object.assign(extra, { allowDup: true }));
+      return;
+    }
+    if (!r.ok && r.code === 'SHORT'){
+      const list = r.short.map(s => `• ${s.name} ${s.detail}: มี ${s.balance} จะตัด ${s.qty}`).join('\n');
+      if (confirm('⚠️ สต็อกไม่พอ:\n' + list + '\n\nยืนยันตัดจนติดลบ?')) return save(Object.assign(extra, { force: true }));
+      return;
+    }
+    toast('บันทึก' + MODE_INFO[MODE].label + ' ' + r.saved + ' รายการ / ' + fmt(r.totalQty) + ' ชิ้น ✓');
+    STOCK = r.stock; renderStock(); fillRefs(r.refs);
+    if (MODE === 'COUNT') showVariance(r.variance, payload);
+    CART.clear(); renderCart(); $('#flash').className = '';
+  }catch(e){ toast(e, 'err'); }
+  finally{ $('#saveBtn').disabled = false; focusScan(); }
+}
+$('#saveBtn').onclick = () => save();
+
+/* ---------- ตรวจนับ ---------- */
+function showVariance(v, payload){
+  LAST_VAR = { v, payload };
+  $('#varCard').hidden = false;
+  $('#varBody').innerHTML = v.map(x => `<tr>
+    <td><b>${esc(x.name)}</b><div class="sub">${esc(x.detail)}</div></td>
+    <td class="n">${fmt(x.system)}</td><td class="n">${fmt(x.counted)}</td>
+    <td class="n ${x.diff < 0 ? 'neg' : x.diff > 0 ? 'pos' : ''}">${x.diff > 0 ? '+' : ''}${fmt(x.diff)}</td></tr>`).join('');
+  $('#adjBtn').hidden = !v.some(x => x.diff !== 0);
+}
+$('#adjBtn').onclick = async () => {
+  if (!LAST_VAR || !confirm('ปรับยอดในระบบให้เท่ากับยอดที่นับได้?')) return;
+  const { v, payload } = LAST_VAR;
+  try{
+    const r = await call('applyAdjust', { ref: payload.ref, staff: payload.staff, branch: payload.branch,
+      items: v.filter(x => x.diff !== 0).map(x => ({ barcode: x.barcode, diff: x.diff })) });
+    STOCK = r.stock; renderStock(); toast('ปรับยอดแล้ว ' + r.saved + ' รายการ ✓');
+    $('#varCard').hidden = true; LAST_VAR = null;
+  }catch(e){ toast(e, 'err'); }
+};
+
+/* ---------- stock ---------- */
+function renderStock(){
+  const q = $('#stockSearch').value.trim().toLowerCase();
+  const list = STOCK.filter(s => !q || (s.name + s.detail + s.barcode + s.cat).toLowerCase().includes(q));
+  $('#kSku').textContent = fmt(STOCK.length);
+  $('#kPcs').textContent = fmt(STOCK.reduce((a, s) => a + s.balance, 0));
+  $('#kZero').textContent = fmt(STOCK.filter(s => s.balance === 0).length);
+  $('#kNeg').textContent = fmt(STOCK.filter(s => s.balance < 0).length);
+  $('#stockBody').innerHTML = list.length ? list.map(s => `<tr>
+    <td><b>${esc(s.name)}</b><div class="sub">${esc(s.cat)} · ${esc(s.detail)}</div></td>
+    <td class="hide-sm sub">${esc(s.barcode)}</td>
+    <td class="n ${s.balance < 0 ? 'neg' : s.balance === 0 ? 'sub' : ''}" style="font-size:17px;font-weight:700">${fmt(s.balance)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="empty">ไม่พบสินค้า</td></tr>';
+}
+$('#stockSearch').oninput = renderStock;
+$('#stockRefresh').onclick = () => call('getStock').then(s => { STOCK = s; renderStock(); toast('อัปเดตแล้ว'); }).catch(e => toast(e, 'err'));
+
+/* ---------- compare ---------- */
+function fillRefs(refs){
+  $('#refList').innerHTML = (refs || []).map(r =>
+    `<option value="${esc(r.ref)}">${esc(r.date)} · ${esc(r.branch || '-')} · สแกน ${fmt(r.scanned)} ${r.reported ? '· มีรีพอต' : '· ยังไม่มีรีพอต'}</option>`).join('');
+}
+$('#cmpBtn').onclick = async () => {
+  const ref = $('#cmpRef').value.trim();
+  if (!ref) return toast('เลือกเลขที่เอกสารก่อน', 'err');
+  $('#cmpResult').innerHTML = '<p class="empty">กำลังเทียบ…</p>';
+  try{
+    const r = await call('compareReport', ref);
+    if (!r.rows.length){ $('#cmpResult').innerHTML = '<p class="empty">ไม่พบข้อมูลของเลขที่ ' + esc(r.ref) + ' ทั้งใน LOG และ STAFF_REPORT</p>'; return; }
+    const t = r.totals;
+    const cls = s => s === 'ตรง' ? 't-ok' : (s === 'รายงานเกิน' || s === 'รายงานขาด') ? 't-bad' : 't-warn';
+    $('#cmpResult').innerHTML = `
+      <div class="cards">
+        <div class="kpi"><span class="sub">สแกนส่งออก</span><b>${fmt(t.scanned)}</b></div>
+        <div class="kpi"><span class="sub">น้องรายงาน</span><b>${fmt(t.reported)}</b></div>
+        <div class="kpi"><span class="sub">ส่วนต่าง</span><b class="${t.diff ? 'neg' : 'pos'}">${t.diff > 0 ? '+' : ''}${fmt(t.diff)}</b></div>
+        <div class="kpi"><span class="sub">SKU ไม่ตรง</span><b class="${t.mismatch ? 'neg' : 'pos'}">${t.mismatch}/${t.items}</b></div>
+      </div>
+      <table><thead><tr><th>สินค้า</th><th class="n">สแกน</th><th class="n">รายงาน</th><th class="n">ต่าง</th><th>สถานะ</th></tr></thead><tbody>
+      ${r.rows.map(x => `<tr><td><b>${esc(x.name)}</b><div class="sub">${esc(x.detail)} · ${esc(x.barcode)}</div></td>
+        <td class="n">${fmt(x.scanned)}</td><td class="n">${fmt(x.reported)}</td>
+        <td class="n ${x.diff ? 'neg' : ''}">${x.diff > 0 ? '+' : ''}${fmt(x.diff)}</td>
+        <td><span class="tag ${cls(x.status)}">${esc(x.status)}</span></td></tr>`).join('')}
+      </tbody></table><p class="sub">บันทึกผลลงชีต COMPARE แล้ว</p>`;
+  }catch(e){ $('#cmpResult').innerHTML = ''; toast(e, 'err'); }
+};
+
+/* ---------- history ---------- */
+function loadHistory(){
+  $('#histBody').innerHTML = '<tr><td colspan="5" class="empty">กำลังโหลด…</td></tr>';
+  call('getHistory', 100).then(h => {
+    $('#histBody').innerHTML = h.length ? h.map(x => `<tr>
+      <td class="sub">${esc(x.ts)}</td>
+      <td><span class="tag t-${esc(x.type)}">${esc(x.type)}</span></td>
+      <td>${esc(x.ref)}<div class="sub">${esc(x.staff)} · ${esc(x.branch)}</div></td>
+      <td>${esc(x.name)}<div class="sub">${esc(x.detail)}</div></td>
+      <td class="n ${x.type === 'OUT' || x.qty < 0 ? 'neg' : ''}">${fmt(x.qty)}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">ยังไม่มีประวัติ</td></tr>';
+  }).catch(e => toast(e, 'err'));
+}
+$('#histRefresh').onclick = loadHistory;
+
+$('#setBtn').onclick = openSettings;
+init();
+</script>
+</body>
+</html>
